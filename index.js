@@ -178,5 +178,5 @@ app.get("/news", async (req, res) => {
   res.json({ articles });
 });
 
-const PORT = process.env.PORT || 3001;server running on port ${PORT}`));
-app.listen(PORT, () => console.log(`Verdant 
+const PORT = process.env.PORT || 3001;
+app.listen(PORT, () => console.log(`Verdant server running on port ${PORT}`));
