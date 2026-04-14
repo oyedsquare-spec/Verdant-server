@@ -23,8 +23,7 @@ let isPolling = false;
 let stats = { totalAlerts: 0, newsAlerts: 0, priceAlerts: 0, lastError: null };
 
 const POLL_MS = 15 * 60 * 1000;
-const FMP = "https://financialmodelingprep.com/stable";
-const CLAUDE_API = "https://api.anthropic.com/v1/messages";
+const FINNHUB = "https://finnhub.io/api/v1";
 
 function addAlert(type, title, ticker, body, sent) {
   const alert = { id: Date.now() + Math.random(), type, title, ticker, body, sent, time: new Date().toISOString() };
@@ -35,7 +34,7 @@ function addAlert(type, title, ticker, body, sent) {
 
 async function isBreakingNews(headline, summary) {
   try {
-    const res = await fetch(CLAUDE_API, {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -61,7 +60,10 @@ async function sendWhatsApp(message) {
     });
     const res = await fetch(url, {
       method: "POST",
-      headers: { Authorization: "Basic " + Buffer.from(`${config.twilioSid}:${config.twilioToken}`).toString("base64"), "Content-Type": "application/x-www-form-urlencoded" },
+      headers: {
+        Authorization: "Basic " + Buffer.from(`${config.twilioSid}:${config.twilioToken}`).toString("base64"),
+        "Content-Type": "application/x-www-form-urlencoded"
+      },
       body: params
     });
     return res.ok;
@@ -71,19 +73,32 @@ async function sendWhatsApp(message) {
 async function fetchNews() {
   if (!config.fmpKey) return [];
   try {
-    const res = await fetch(`https://financialmodelingprep.com/stable/news/stock?limit=50&apikey=${config.fmpKey}`);
-    return Array.isArray(data) ? data : [];
+    const res = await fetch(`${FINNHUB}/news?category=general&token=${config.fmpKey}`);
+    const data = await res.json();
+    return Array.isArray(data) ? data.map(a => ({
+      title: a.headline,
+      text: a.summary,
+      url: a.url,
+      symbol: a.related || "MARKET",
+      site: a.source,
+      publishedDate: new Date(a.datetime * 1000).toISOString()
+    })) : [];
   } catch (e) { stats.lastError = e.message; return []; }
 }
 
 async function fetchBigMovers() {
   if (!config.fmpKey) return [];
   try {
-    const [gainers, losers] = await Promise.all([
-      fetch(`${FMP}/gainers?apikey=${config.fmpKey}`).then(r => r.json()),
-      fetch(`${FMP}/losers?apikey=${config.fmpKey}`).then(r => r.json())
-    ]);
-    return [...(Array.isArray(gainers) ? gainers : []), ...(Array.isArray(losers) ? losers : [])].filter(s => Math.abs(s.changesPercentage) >= 5);
+    const symbols = ["AAPL","MSFT","NVDA","TSLA","AMZN","GOOGL","META","V","JPM","JNJ"];
+    const results = await Promise.all(symbols.map(async s => {
+      try {
+        const res = await fetch(`${FINNHUB}/quote?symbol=${s}&token=${config.fmpKey}`);
+        const d = await res.json();
+        const pct = d.dp || 0;
+        return { ticker: s, price: d.c, change: d.d, changesPercentage: pct };
+      } catch(e) { return null; }
+    }));
+    return results.filter(r => r && Math.abs(r.changesPercentage) >= 5);
   } catch (e) { stats.lastError = e.message; return []; }
 }
 
@@ -137,7 +152,7 @@ function stopPolling() {
 
 if (config.fmpKey && config.twilioSid && config.twilioTo) startPolling();
 
-app.get("/health", (req, res) => res.json({ status: "ok", polling: !!pollInterval, lastPollTime, nextPollTime, stats, alertCount: alertLog.length, configured: !!(config.fmpKey && config.twilioSid && config.twilioTo) }));
+app.get("/health", (req, res) => res.json({ status: "ok", polling: !!pollInterval, lastPollTime, nextPollTime, stats, alertCount: alertLog.length, configured: !!(config.fmpKey) }));
 app.get("/config", (req, res) => res.json({ fmpKey: config.fmpKey ? "***" + config.fmpKey.slice(-4) : "", twilioSid: config.twilioSid ? "set" : "", polling: !!pollInterval }));
 app.post("/config", (req, res) => {
   const { fmpKey, twilioSid, twilioToken, twilioFrom, twilioTo } = req.body;
@@ -146,7 +161,7 @@ app.post("/config", (req, res) => {
   if (twilioToken) config.twilioToken = twilioToken;
   if (twilioFrom) config.twilioFrom = twilioFrom;
   if (twilioTo) config.twilioTo = twilioTo;
-  if (config.fmpKey && config.twilioSid && config.twilioTo) startPolling();
+  if (config.fmpKey) startPolling();
   res.json({ ok: true, polling: !!pollInterval });
 });
 app.get("/alerts", (req, res) => res.json({ alerts: alertLog, stats }));
@@ -158,7 +173,10 @@ app.post("/test-whatsapp", async (req, res) => {
   const sent = await sendWhatsApp(msg);
   res.json({ ok: sent, message: sent ? "Test message sent!" : "Failed — check Twilio keys" });
 });
-app.get("/news", async (req, res) => { const articles = await fetchNews(); res.json({ articles }); });
+app.get("/news", async (req, res) => {
+  const articles = await fetchNews();
+  res.json({ articles });
+});
 
-const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => console.log(`Verdant server running on port ${PORT}`));
+const PORT = process.env.PORT || 3001;server running on port ${PORT}`));
+app.listen(PORT, () => console.log(`Verdant 
