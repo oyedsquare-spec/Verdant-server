@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: verdant-server
+    runtime: node
+    buildCommand: npm install
+    startCommand: node index.js
+    plan: free
+    envVars:
+      - key: NODE_VERSION
+        value: 18
