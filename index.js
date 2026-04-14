@@ -23,7 +23,7 @@ let isPolling = false;
 let stats = { totalAlerts: 0, newsAlerts: 0, priceAlerts: 0, lastError: null };
 
 const POLL_MS = 15 * 60 * 1000;
-const FMP = "https://financialmodelingprep.com/api/v3";
+const FMP = "https://financialmodelingprep.com/stable";
 const CLAUDE_API = "https://api.anthropic.com/v1/messages";
 
 function addAlert(type, title, ticker, body, sent) {
@@ -71,8 +71,7 @@ async function sendWhatsApp(message) {
 async function fetchNews() {
   if (!config.fmpKey) return [];
   try {
-    const res = await fetch(`${FMP}/stock_news?limit=50&apikey=${config.fmpKey}`);
-    const data = await res.json();
+    const res = await fetch(`https://financialmodelingprep.com/stable/news/stock?limit=50&apikey=${config.fmpKey}`);
     return Array.isArray(data) ? data : [];
   } catch (e) { stats.lastError = e.message; return []; }
 }
